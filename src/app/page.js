@@ -1,103 +1,209 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { ethers } from "ethers";
+import { CONTRACT_ABI, CONTRACT_ADDRESS } from "./utils/abi";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [account, setAccount] = useState(null);
+  const [contract, setContract] = useState(null);
+  const [beneficiary, setBeneficiary] = useState("");
+  const [unlockTime, setUnlockTime] = useState("");
+  const [amount, setAmount] = useState("");
+  const [vaultId, setVaultId] = useState("");
+  const [vaultInfo, setVaultInfo] = useState(null);
+  const [txHash, setTxHash] = useState(null); // estado para o hash da tx
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // Conectar carteira
+  async function connectWallet() {
+    if (!window.ethereum) return alert("Instale o Metamask!");
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+    const contractInstance = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+    setAccount(accounts[0]);
+    setContract(contractInstance);
+  }
+
+  // Criar Vault ETH
+  async function createVaultETH() {
+    if (!contract) return alert("Conecte a carteira!");
+    try {
+      const tx = await contract.createVault(
+        beneficiary,
+        Math.floor(new Date(unlockTime).getTime() / 1000), // timestamp
+        ethers.ZeroAddress,
+        0,
+        { value: ethers.parseEther(amount) }
+      );
+      setTxHash(tx.hash); // salva hash para mostrar modal
+      await tx.wait();
+      alert("Vault criado com sucesso!");
+    } catch (error) {
+      alert("Erro: " + error.message);
+    }
+  }
+
+  // Buscar informações do Vault
+  async function fetchVault() {
+    if (!contract) return;
+    const info = await contract.getVaultInfo(Number(vaultId));
+    setVaultInfo(info);
+  }
+
+  // Sacar do Vault
+  async function withdrawVault() {
+    if (!contract) return;
+    const tx = await contract.withdraw(Number(vaultId));
+    await tx.wait();
+    alert("Saque realizado!");
+  }
+
+  // Fechar modal do tx hash
+  function closeModal() {
+    setTxHash(null);
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white p-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Título */}
+        <h1 className="text-4xl font-extrabold mb-10 text-center">
+          💎 Cofre Cripto <span className="text-blue-400">@lucashenz</span>
+        </h1>
+
+        {/* Carteira */}
+        <div className="flex justify-center mb-8">
+          {!account ? (
+            <button
+              onClick={connectWallet}
+              className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-xl shadow-lg transition-all duration-200"
+            >
+              Conectar Carteira
+            </button>
+          ) : (
+            <p className="text-lg bg-gray-700 px-4 py-2 rounded-lg">
+              ✅ Conectado: <span className="text-green-400">{account}</span>
+            </p>
+          )}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+
+        {/* Criar Vault */}
+        <div className="bg-gray-800/60 backdrop-blur-lg p-6 rounded-2xl shadow-lg mb-6">
+          <h2 className="text-2xl font-bold mb-4 border-b border-gray-700 pb-2">📦 Criar Vault (ETH)</h2>
+          <div className="space-y-3">
+            <input
+              type="text"
+              placeholder="Beneficiário (endereço)"
+              className="bg-gray-900 border border-gray-700 p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"
+              value={beneficiary}
+              onChange={(e) => setBeneficiary(e.target.value)}
+            />
+            <input
+              type="datetime-local"
+              className="bg-gray-900 border border-gray-700 p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"
+              value={unlockTime}
+              onChange={(e) => setUnlockTime(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Valor em ETH"
+              className="bg-gray-900 border border-gray-700 p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <button
+              onClick={createVaultETH}
+              className="w-full bg-green-600 hover:bg-green-500 px-6 py-3 rounded-xl shadow-lg transition-all duration-200"
+            >
+              Criar Vault 🚀
+            </button>
+          </div>
+        </div>
+
+        {/* Buscar Vault */}
+        <div className="bg-gray-800/60 backdrop-blur-lg p-6 rounded-2xl shadow-lg mb-6">
+          <h2 className="text-2xl font-bold mb-4 border-b border-gray-700 pb-2">🔍 Buscar Vault</h2>
+          <div className="space-y-3">
+            <input
+              type="text"
+              placeholder="Vault ID"
+              className="bg-gray-900 border border-gray-700 p-3 w-full rounded-lg focus:ring-2 focus:ring-yellow-400 outline-none"
+              value={vaultId}
+              onChange={(e) => setVaultId(e.target.value)}
+            />
+            <button
+              onClick={fetchVault}
+              className="w-full bg-yellow-500 hover:bg-yellow-400 text-black px-6 py-3 rounded-xl shadow-lg transition-all duration-200"
+            >
+              Buscar 📂
+            </button>
+
+            {vaultInfo && (
+              <div className="mt-4 bg-gray-900 p-4 rounded-lg border border-gray-700">
+                <p><strong>Owner:</strong> {vaultInfo.owner}</p>
+                <p><strong>Beneficiário:</strong> {vaultInfo.beneficiary}</p>
+                <p><strong>Valor:</strong> {ethers.formatEther(vaultInfo.amount)} ETH</p>
+                <p><strong>Desbloqueio:</strong> {new Date(Number(vaultInfo.unlockTime) * 1000).toLocaleString()}</p>
+                <p><strong>Token:</strong> {vaultInfo.tokenAddress}</p>
+                <p><strong>Retirado:</strong> {vaultInfo.withdrawn ? "Sim ✅" : "Não ❌"}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Sacar Vault */}
+        <div className="bg-gray-800/60 backdrop-blur-lg p-6 rounded-2xl shadow-lg">
+          <h2 className="text-2xl font-bold mb-4 border-b border-gray-700 pb-2">💰 Sacar Vault</h2>
+          <div className="space-y-3">
+            <input
+              type="text"
+              placeholder="Vault ID"
+              className="bg-gray-900 border border-gray-700 p-3 w-full rounded-lg focus:ring-2 focus:ring-red-400 outline-none"
+              value={vaultId}
+              onChange={(e) => setVaultId(e.target.value)}
+            />
+            <button
+              onClick={withdrawVault}
+              className="w-full bg-red-600 hover:bg-red-500 px-6 py-3 rounded-xl shadow-lg transition-all duration-200"
+            >
+              Sacar 💸
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Modal de tx hash */}
+      {txHash && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50"
+          onClick={closeModal}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          <div
+            className="bg-gray-900 p-6 rounded-lg max-w-md w-full text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-2xl mb-4">Transação enviada!</h2>
+            <p className="break-words">
+              Tx Hash:{" "}
+              <a
+                href={`https://sepolia.etherscan.io/tx/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-green-400 underline"
+              >
+                {txHash}
+              </a>
+            </p>
+            <button
+              onClick={closeModal}
+              className="mt-6 bg-green-600 hover:bg-green-500 px-5 py-2 rounded-lg"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
